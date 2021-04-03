@@ -6,7 +6,7 @@ fn main() {
 
 mod tests {
     use super::parser::{query, Query};
-    use crate::parser::{QueryArray, QueryBraces};
+    use crate::parser::{QueryArray, QueryBraces, QueryObjectIndex, QueryPipe};
 
     #[test]
     fn parse_identity() {
@@ -27,5 +27,31 @@ mod tests {
             query: Box::new(Query::Identity),
         });
         assert_eq!(query("(.)"), Ok(("", expected)))
+    }
+
+    #[test]
+    fn parse_pipe() {
+        let expected = Query::Pipe(QueryPipe {
+            seq: vec![Query::Identity, Query::Identity],
+        });
+        assert_eq!(query(".|."), Ok(("", expected)))
+    }
+
+    #[test]
+    fn parse_attr() {
+        let expected = Query::ObjectIndex(QueryObjectIndex { attr: "key" });
+        assert_eq!(query(".key"), Ok(("", expected)))
+    }
+
+    #[test]
+    fn parse_array_index() {
+        let expected = Query::ObjectIndex(QueryObjectIndex { attr: "key" });
+        assert_eq!(query(".[0]"), Ok(("", expected)))
+    }
+
+    #[test]
+    fn parse_slice() {
+        let expected = Query::ObjectIndex(QueryObjectIndex { attr: "key" });
+        assert_eq!(query(".[0:2]"), Ok(("", expected)))
     }
 }
