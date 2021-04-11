@@ -4,6 +4,7 @@ use self::nom::character::complete::{alphanumeric1, digit0, digit1};
 use self::nom::character::is_alphabetic;
 use self::nom::combinator::not;
 use self::nom::error::ParseError;
+use self::nom::multi::fold_many1;
 use self::nom::sequence::pair;
 use self::nom::Parser;
 use nom::branch::alt;
@@ -13,7 +14,7 @@ use nom::multi::separated_list0;
 use nom::sequence::delimited;
 use nom::IResult;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Query<'q> {
     Identity,
     ObjectIndex(QueryObjectIndex<'q>),
@@ -26,39 +27,39 @@ pub enum Query<'q> {
     Array(QueryArray<'q>),
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct QuerySlice {
     pub start: Option<i64>,
     pub end: Option<i64>,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct QueryObjectIndex<'q> {
     pub index: &'q str,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct QueryBraces<'q> {
     pub query: Box<Query<'q>>,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct QueryArray<'q> {
     pub query: Box<Query<'q>>,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct QueryPipe<'q> {
     pub seq: Vec<Query<'q>>,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 struct QueryExpr {}
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 struct QueryFilter {}
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct QueryArrayIndex {
     pub index: i64,
 }
@@ -113,23 +114,35 @@ pub fn query(input: &str) -> IResult<&str, Query> {
     );
     let query_braces = query_delimited!(Braces, QueryBraces, query_identity, '(', ')');
     let query_array = query_delimited!(Array, QueryArray, query_identity, '[', ']');
-    let query_wo_pipe = alt((
-        query_array,
-        query_braces,
+    let query_chain = alt((
         query_attr,
         query_object_index,
         query_array_index,
         query_slice,
+    ));
+    let query_chain_repeat = combinator::map(
+        fold_many1(query_chain, Vec::new(), |mut acc, item| {
+            acc.push(item);
+            acc
+        }),
+        to_pipe,
+    );
+    let query_wo_pipe = alt((
+        query_array,
+        query_braces,
+        query_chain_repeat,
         query_identity,
     ));
-    let mut query_pipe = combinator::map(separated_list0(char('|'), query_wo_pipe), |arr| {
-        let len = arr.len();
-        match (arr, len) {
-            (mut arr, 1) => arr.pop().unwrap(),
-            (arr, _) => Query::Pipe(QueryPipe { seq: arr }),
-        }
-    });
+    let mut query_pipe = combinator::map(separated_list0(char('|'), query_wo_pipe), to_pipe);
     query_pipe(input)
+}
+
+fn to_pipe(arr: Vec<Query>) -> Query {
+    let len = arr.len();
+    match (arr, len) {
+        (mut arr, 1) => arr.pop().unwrap(),
+        (arr, _) => Query::Pipe(QueryPipe { seq: arr }),
+    }
 }
 
 fn triple<F1, F2, F3, O1, O2, O3, I, E>(

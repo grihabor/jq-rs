@@ -75,4 +75,28 @@ mod tests {
         });
         assert_eq!(query(".[0:]"), Ok(("", expected)));
     }
+
+    #[test]
+    fn parse_index_and_attr() {
+        let expected = Query::Pipe(QueryPipe {
+            seq: vec![
+                Query::ArrayIndex(QueryArrayIndex { index: 1 }),
+                Query::ObjectIndex(QueryObjectIndex { index: "key" }),
+            ],
+        });
+        assert_eq!(query(".[1]|.key"), Ok(("", expected.clone())));
+        assert_eq!(query(".[1].key"), Ok(("", expected)))
+    }
+
+    #[test]
+    fn parse_attr_and_index() {
+        let expected = Query::Pipe(QueryPipe {
+            seq: vec![
+                Query::ObjectIndex(QueryObjectIndex { index: "key" }),
+                Query::ArrayIndex(QueryArrayIndex { index: 1 }),
+            ],
+        });
+        assert_eq!(query(".key|.[1]"), Ok(("", expected.clone())));
+        assert_eq!(query(".key[1]"), Ok(("", expected)))
+    }
 }
